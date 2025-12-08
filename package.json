@@ -1,0 +1,18 @@
+{
+  "name": "moomoo-proxy",
+  "version": "2.0.0",
+  "description": "Advanced WebSocket proxy for MooMoo.io bots by Yuta1111x",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.14.2"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "author": "Yuta1111x",
+  "license": "MIT"
+}
