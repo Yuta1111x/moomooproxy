@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Bots made by Yuta1111x
-// @version      5
+// @version      6
 // @description  Unlimited bots spawn with proxies [bypass altcha]
 // @author       Yuta1111x
 // @match        *://*.moomoo.io/*
@@ -72,6 +72,34 @@ const OLD_PROXY_LIST = [
 window.PROXY_LIST = PROXY_LIST;
 const MAX_BOTS = 1 + PROXY_LIST.length * 2;
 
+// ============ GRID REMOVAL ============
+const GRID_ENABLED = false;
+function inRange(value, min, max) { return value > min && value < max; }
+function createHook(target, prop, callback) {
+    const symbol = Symbol(prop);
+    Object.defineProperty(target, prop, {
+        get() { return this[symbol]; },
+        set(value) { callback(this, symbol, value); },
+        configurable: true
+    });
+}
+createHook(window, "config", function(that, symbol, value) {
+    if (typeof value === "object" && value.hasOwnProperty("maxScreenHeight")) {
+        delete window.config;
+        Object.defineProperty(window, "config", { value: value, configurable: false, writeable: false });
+    }
+});
+CanvasRenderingContext2D.prototype.moveTo = new Proxy(CanvasRenderingContext2D.prototype.moveTo, {
+    apply(target, _this, args) {
+        if (!GRID_ENABLED) {
+            const [x, y] = args;
+            const { maxScreenWidth, maxScreenHeight } = window.config || {};
+            if (inRange(x, 0, maxScreenWidth) || inRange(y, 0, maxScreenHeight)) return null;
+        }
+        return target.apply(_this, args);
+    }
+});
+
 // Internal config (do not modify) - yuta: 1
 const _$cfg = { _v: 1, _m: 0x59555441 };
 const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
@@ -86,9 +114,10 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
             return setTimeout(initGUI, 50);
         }
         
-        const ACCENT = '#dc2626'; // Dark red
-        const ACCENT_LIGHT = '#ef4444';
-        const ACCENT_GLOW = 'rgba(220, 38, 38, 0.4)';
+        // Blood theme - dark & realistic
+        const ACCENT = '#8b0000'; // Dark blood red
+        const ACCENT_LIGHT = '#b91c1c';
+        const ACCENT_GLOW = 'rgba(139, 0, 0, 0.5)';
         
         const style = document.createElement('style');
     style.innerHTML = `
@@ -98,20 +127,21 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
             position: fixed; top: 50%; left: 50%;
             transform: translate(-50%, -50%) scale(0.9);
             width: 700px; max-width: 95vw;
-            background: linear-gradient(145deg, #0f0f0f 0%, #1a1a1a 100%);
-            border-radius: 20px;
-            box-shadow: 0 25px 80px rgba(0,0,0,0.8), 0 0 40px ${ACCENT_GLOW};
-            color: #fff; font-family: 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(145deg, #050505 0%, #0a0a0a 50%, #0d0808 100%);
+            border-radius: 16px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.95), 0 0 60px ${ACCENT_GLOW}, inset 0 1px 0 rgba(139,0,0,0.2);
+            color: #e8e8e8; font-family: 'Segoe UI', system-ui, sans-serif;
             opacity: 0; visibility: hidden; z-index: 99999;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            border: 1px solid rgba(220, 38, 38, 0.3);
+            border: 1px solid rgba(139, 0, 0, 0.4);
             overflow: hidden;
         }
         #modMenu.show { opacity: 1; visibility: visible; transform: translate(-50%, -50%) scale(1); }
         
         .mm-header {
-            background: linear-gradient(135deg, ${ACCENT} 0%, #991b1b 100%);
+            background: linear-gradient(135deg, #1a0000 0%, ${ACCENT} 50%, #1a0000 100%);
             padding: 16px 20px; display: flex; justify-content: space-between; align-items: center;
+            border-bottom: 1px solid rgba(139,0,0,0.5);
         }
         .mm-title { font-size: 20px; font-weight: 700; display: flex; align-items: center; gap: 10px; }
         .mm-title svg { width: 24px; height: 24px; }
@@ -128,10 +158,10 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
         
         .mm-stats-bar {
             display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px;
-            padding: 12px 16px; background: rgba(0,0,0,0.4);
-            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding: 12px 16px; background: rgba(0,0,0,0.6);
+            border-bottom: 1px solid rgba(139,0,0,0.2);
         }
-        .mm-stat { text-align: center; padding: 8px; background: rgba(255,255,255,0.03); border-radius: 8px; }
+        .mm-stat { text-align: center; padding: 8px; background: rgba(139,0,0,0.08); border-radius: 8px; border: 1px solid rgba(139,0,0,0.15); }
         .mm-stat-num { font-size: 22px; font-weight: 700; color: ${ACCENT_LIGHT}; }
         .mm-stat-label { font-size: 9px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 0.5px; }
         
@@ -144,15 +174,15 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
         
         .mm-row { display: flex; gap: 6px; margin-bottom: 6px; }
         .mm-btn {
-            flex: 1; padding: 10px 8px; border: none; border-radius: 8px;
-            background: rgba(255,255,255,0.05); color: #fff;
+            flex: 1; padding: 10px 8px; border: none; border-radius: 6px;
+            background: rgba(139,0,0,0.15); color: #ccc;
             font-size: 11px; cursor: pointer; transition: all 0.2s;
             display: flex; align-items: center; justify-content: center; gap: 4px;
-            border: 1px solid rgba(255,255,255,0.05);
+            border: 1px solid rgba(139,0,0,0.25);
         }
-        .mm-btn:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); }
-        .mm-btn.active { background: linear-gradient(135deg, ${ACCENT} 0%, #991b1b 100%); border-color: ${ACCENT}; }
-        .mm-btn.red { background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%); }
+        .mm-btn:hover { background: rgba(139,0,0,0.3); border-color: rgba(139,0,0,0.5); color: #fff; }
+        .mm-btn.active { background: linear-gradient(135deg, ${ACCENT} 0%, #5c0000 100%); border-color: ${ACCENT}; color: #fff; box-shadow: 0 0 15px rgba(139,0,0,0.4); }
+        .mm-btn.red { background: linear-gradient(135deg, #8b0000 0%, #5c0000 100%); border-color: #8b0000; }
         .mm-btn svg { width: 14px; height: 14px; }
         
         .mm-slider-wrap { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
@@ -183,7 +213,7 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
             background: rgba(255,255,255,0.15); cursor: pointer;
             position: relative; transition: all 0.2s;
         }
-        .mm-toggle.on { background: linear-gradient(135deg, ${ACCENT_LIGHT} 0%, ${ACCENT} 100%); }
+        .mm-toggle.on { background: linear-gradient(135deg, ${ACCENT_LIGHT} 0%, ${ACCENT} 100%); box-shadow: 0 0 10px rgba(139,0,0,0.5); }
         .mm-toggle::after {
             content: ''; position: absolute; top: 2px; left: 2px;
             width: 14px; height: 14px; border-radius: 50%;
@@ -371,6 +401,14 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
                     <span class="mm-toggle-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Auto Heal (bots)</span>
                     <div class="mm-toggle on" id="togAutoHealBots"></div>
                 </div>
+                <div class="mm-toggle-row">
+                    <span class="mm-toggle-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/></svg> AutoAim (bots)</span>
+                    <div class="mm-toggle" id="togAutoAim"></div>
+                </div>
+                <div class="mm-toggle-row">
+                    <span class="mm-toggle-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Sync Attack [X]</span>
+                    <div class="mm-toggle" id="togSync"></div>
+                </div>
             </div>
         </div>
         <div class="mm-tab-content" id="tabAdmin">
@@ -383,7 +421,7 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
                 </div>
             </div>
         </div>
-        <div class="mm-hint">Press ESC to toggle | v3.0 by Yuta1111x</div>
+        <div class="mm-hint">ESC toggle | X sync | v4.0 Blood by Yuta1111x</div>
     `;
     document.body.appendChild(menu);
 
@@ -497,6 +535,8 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
     setupToggle('togSkipUpgrade', 'skipUpgrade', true);
     setupToggle('togAutoHealMe', 'autoHealMe', true);
     setupToggle('togAutoHealBots', 'autoHealBots', true);
+    setupToggle('togAutoAim', 'botsAutoAim', false);
+    setupToggle('togSync', 'syncAttackEnabled', false);
     
     // Clear recording button
     getEl('btnClearRec').onclick = () => {
@@ -585,6 +625,70 @@ window.botsStay = false;
 window.playerFollowerGlobal = true;
 window.botsCursorFollow = false;
 window.botsSmartFollow = false;
+window.botsAutoAim = false;
+window.syncAttackEnabled = false;
+window.syncCooldown = false;
+
+// Range weapons: bow (9), repeater crossbow (12), crossbow (13), musket (15)
+const RANGE_WEAPONS = [9, 12, 13, 15];
+
+// Sync attack function - all bots + player shoot at same enemy
+window.syncAttack = () => {
+    if (window.syncCooldown || !nearestEnemy) return;
+    
+    const enemyX = nearestEnemy[1];
+    const enemyY = nearestEnemy[2];
+    const angle = Math.atan2(enemyY - myPlayer.y, enemyX - myPlayer.x);
+    
+    // Check if player has range weapon
+    const playerHasRange = RANGE_WEAPONS.includes(secondary);
+    
+    // Find bots with range weapons
+    const botsWithRange = [];
+    for (let i in sockets) {
+        const botWs = sockets[i];
+        if (botWs && RANGE_WEAPONS.includes(botWs.secondary)) {
+            botsWithRange.push(botWs);
+        }
+    }
+    
+    if (!playerHasRange && botsWithRange.length === 0) return;
+    
+    window.syncCooldown = true;
+    
+    // Player shoots
+    if (playerHasRange && ws?.oldSend) {
+        ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [secondary, 1]]))));
+        ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['D', [angle]]))));
+        ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [1, angle]]))));
+        setTimeout(() => {
+            ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [0]]))));
+            ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [primary, 1]]))));
+        }, 100);
+    }
+    
+    // Bots shoot
+    for (const botWs of botsWithRange) {
+        botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [botWs.secondary, 1]]))));
+        botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['D', [angle]]))));
+        botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [1, angle]]))));
+        setTimeout(() => {
+            botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [0]]))));
+            botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [botWs.primary, 1]]))));
+        }, 100);
+    }
+    
+    // 3 second cooldown
+    setTimeout(() => { window.syncCooldown = false; }, 3000);
+    console.log(`[Sync] Fired at enemy! Player: ${playerHasRange}, Bots: ${botsWithRange.length}`);
+};
+
+// X key for sync attack
+document.addEventListener('keydown', e => {
+    if (e.key.toLowerCase() === 'x' && window.syncAttackEnabled) {
+        window.syncAttack();
+    }
+});
 
 // ============ PATHFINDER SYSTEM ============
 // Store all game objects (buildings, spikes, etc.)
@@ -1127,8 +1231,20 @@ const handleMessage = e => {
                 LED = Date.now();
                 // Always send direction for main player
                 doNewSend(["D", [dir]]);
+                // AutoAim - bots always look at nearest enemy
+                if (window.botsAutoAim && nearestEnemy) {
+                    for (let id in sockets) {
+                        const bot = bots[id];
+                        if (bot && sockets[id]?.connected) {
+                            const enemyX = nearestEnemy[1];
+                            const enemyY = nearestEnemy[2];
+                            const botDir = Math.atan2(enemyY - bot.y, enemyX - bot.x);
+                            sockets[id].oldSend(new Uint8Array(Array.from(msgpack5.encode(["D", [botDir]]))));
+                        }
+                    }
+                }
                 // Send to bots if copy direction is ON - bots look AT cursor position
-                if (window.botsCopyDir && !followingfarm) {
+                else if (window.botsCopyDir && !followingfarm) {
                     for (let id in sockets) {
                         const bot = bots[id];
                         if (bot && sockets[id]?.connected) {
