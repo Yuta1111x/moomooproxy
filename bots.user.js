@@ -752,17 +752,18 @@ window.syncAttack = () => {
     
     const enemyX = nearestEnemy[1];
     const enemyY = nearestEnemy[2];
-    const angle = Math.atan2(enemyY - myPlayer.y, enemyX - myPlayer.x);
+    const playerAngle = Math.atan2(enemyY - myPlayer.y, enemyX - myPlayer.x);
     
     // Check if player has range weapon
     const playerHasRange = RANGE_WEAPONS.includes(secondary);
     
-    // Find bots with range weapons
+    // Find bots with range weapons and their positions
     const botsWithRange = [];
-    for (let i in sockets) {
-        const botWs = sockets[i];
-        if (botWs && RANGE_WEAPONS.includes(botWs.secondary)) {
-            botsWithRange.push(botWs);
+    for (let id in sockets) {
+        const botWs = sockets[id];
+        const bot = bots[id];
+        if (botWs && bot && RANGE_WEAPONS.includes(botWs.secondary)) {
+            botsWithRange.push({ ws: botWs, bot: bot });
         }
     }
     
@@ -773,19 +774,20 @@ window.syncAttack = () => {
     // Player shoots
     if (playerHasRange && ws?.oldSend) {
         ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [secondary, 1]]))));
-        ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['D', [angle]]))));
-        ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [1, angle]]))));
+        ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['D', [playerAngle]]))));
+        ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [1, playerAngle]]))));
         setTimeout(() => {
             ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [0]]))));
             ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [primary, 1]]))));
         }, 100);
     }
     
-    // Bots shoot
-    for (const botWs of botsWithRange) {
+    // Bots shoot - each bot calculates angle FROM ITS POSITION to enemy
+    for (const { ws: botWs, bot } of botsWithRange) {
+        const botAngle = Math.atan2(enemyY - bot.y, enemyX - bot.x);
         botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [botWs.secondary, 1]]))));
-        botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['D', [angle]]))));
-        botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [1, angle]]))));
+        botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['D', [botAngle]]))));
+        botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [1, botAngle]]))));
         setTimeout(() => {
             botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [0]]))));
             botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [botWs.primary, 1]]))));
@@ -1672,9 +1674,23 @@ function wsType(url, proxyUrl) {
                 const targetY = pointingOnPosition.y;
                 const distToTarget = Math.hypot(bot.x - targetX, bot.y - targetY);
                 
-                if (distToTarget < 100) {
+                // Calculate ideal position around player (spread out in circle)
+                const botIndex = Object.keys(bots).indexOf(String(bot.id));
+                const totalBots = Object.keys(bots).length || 1;
+                const spreadAngle = (botIndex / totalBots) * Math.PI * 2;
+                const idealDist = 70; // Distance from player
+                const idealX = targetX + Math.cos(spreadAngle) * idealDist;
+                const idealY = targetY + Math.sin(spreadAngle) * idealDist;
+                const distToIdeal = Math.hypot(bot.x - idealX, bot.y - idealY);
+                
+                if (distToTarget < 100 && distToIdeal < 30) {
+                    // Close to ideal position - stop
                     send(['9', []]);
                     if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                } else if (distToTarget < 100) {
+                    // Near player but not in ideal spot - move to spread position
+                    const moveAngle = Math.atan2(idealY - bot.y, idealX - bot.x);
+                    send(['9', [moveAngle]]);
                 } else {
                     const directAngle = Math.atan2(targetY - bot.y, targetX - bot.x);
                     
