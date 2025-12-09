@@ -100,6 +100,70 @@ CanvasRenderingContext2D.prototype.moveTo = new Proxy(CanvasRenderingContext2D.p
     }
 });
 
+// ============ ANTI-KICK / XSS PROTECTION ============
+// Block malicious chat messages that try to crash/kick players
+(function() {
+    // Dangerous patterns to block
+    const DANGEROUS_PATTERNS = [
+        /<iframe/i, /<script/i, /<svg/i, /<img/i, /<style/i,
+        /onload=/i, /onerror=/i, /onclick=/i, /onmouseover=/i,
+        /javascript:/i, /throw\(\)/i, /while\(1\)/i, /alert\(/i,
+        /eval\(/i, /document\./i, /window\./i, /io\.send/i,
+        /display:\s*none/i, /<embed/i, /<object/i, /<meta/i,
+        /<link/i, /<base/i, /src\s*=/i, /href\s*=/i
+    ];
+    
+    // Sanitize message - remove dangerous content
+    const sanitizeMessage = (msg) => {
+        if (typeof msg !== 'string') return msg;
+        for (const pattern of DANGEROUS_PATTERNS) {
+            if (pattern.test(msg)) {
+                console.log('[AntiKick] Blocked malicious message:', msg.substring(0, 50));
+                return '[blocked]';
+            }
+        }
+        return msg;
+    };
+    
+    // Hook innerHTML to prevent XSS
+    const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
+    Object.defineProperty(Element.prototype, 'innerHTML', {
+        set(value) {
+            if (typeof value === 'string') {
+                for (const pattern of DANGEROUS_PATTERNS) {
+                    if (pattern.test(value)) {
+                        console.log('[AntiKick] Blocked innerHTML XSS');
+                        return;
+                    }
+                }
+            }
+            return originalInnerHTML.set.call(this, value);
+        },
+        get() { return originalInnerHTML.get.call(this); }
+    });
+    
+    // Block eval
+    const originalEval = window.eval;
+    window.eval = function(code) {
+        console.log('[AntiKick] Blocked eval attempt');
+        return null;
+    };
+    
+    // Block Function constructor exploits
+    const originalFunction = window.Function;
+    window.Function = function(...args) {
+        const code = args.join(' ');
+        if (/while\s*\(\s*1\s*\)|throw\s*\(|alert\s*\(/i.test(code)) {
+            console.log('[AntiKick] Blocked Function exploit');
+            return () => {};
+        }
+        return originalFunction.apply(this, args);
+    };
+    
+    window.sanitizeMessage = sanitizeMessage;
+    console.log('[AntiKick] Protection enabled');
+})();
+
 // Internal config (do not modify) - yuta: 1
 const _$cfg = { _v: 1, _m: 0x59555441 };
 const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
@@ -1650,15 +1714,37 @@ function wsType(url, proxyUrl) {
                         }
                     }
                     
-                    if (blocked) {
-                        // Calculate avoidance angle - go around the obstacle
+                    // Check for other bots and player (anti-push)
+                    let tooCloseToAlly = false;
+                    const checkX = bot.x + Math.cos(directAngle) * 50;
+                    const checkY = bot.y + Math.sin(directAngle) * 50;
+                    
+                    // Don't push player
+                    const distToPlayer = Math.hypot(checkX - myPlayer.x, checkY - myPlayer.y);
+                    if (distToPlayer < 50) tooCloseToAlly = true;
+                    
+                    // Don't push other bots
+                    for (const id in bots) {
+                        if (id == bot.id) continue;
+                        const otherBot = bots[id];
+                        if (otherBot) {
+                            const distToBot = Math.hypot(checkX - otherBot.x, checkY - otherBot.y);
+                            if (distToBot < 40) { tooCloseToAlly = true; break; }
+                        }
+                    }
+                    
+                    if (isDangerous && blocked) {
+                        // SPIKE DETECTED - STOP IMMEDIATELY (priority)
+                        send(['9', []]);
+                        if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                    } else if (tooCloseToAlly) {
+                        // Too close to player/bot - stop to avoid pushing
+                        send(['9', []]);
+                    } else if (blocked) {
+                        // Regular obstacle - go around
                         const toObstacle = Math.atan2(blocked.y - bot.y, blocked.x - bot.x);
                         const angleDiff = directAngle - toObstacle;
-                        
-                        // For spikes - turn MORE sharply (almost backwards if needed)
-                        const turnAmount = isDangerous ? Math.PI * 0.7 : Math.PI / 2;
-                        const avoidAngle = angleDiff > 0 ? toObstacle - turnAmount : toObstacle + turnAmount;
-                        
+                        const avoidAngle = angleDiff > 0 ? toObstacle - Math.PI/2 : toObstacle + Math.PI/2;
                         send(['9', [avoidAngle]]);
                         if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
                     } else {
