@@ -1302,12 +1302,11 @@ const handleMessage = e => {
                 dead: false
             };
             
-            // Store in gameObjects for pathfinding (player-placed objects)
+            // Store in gameObjects for pathfinding (player-placed objects) - limit to 100
             if (o[6] != null) {
-                // Remove old entry if exists
                 const idx = window.gameObjects.findIndex(g => g.sid === obj.sid);
                 if (idx !== -1) window.gameObjects[idx] = obj;
-                else window.gameObjects.push(obj);
+                else if (window.gameObjects.length < 100) window.gameObjects.push(obj);
             }
             
             // Natural resources
@@ -1553,43 +1552,45 @@ function wsType(url, proxyUrl) {
                 if (d < 30) send(['9', []]); // Stop when very close to cursor
                 else send(['9', [Math.atan2(cursorY - bot.y, cursorX - bot.x)]]);
             }
-            // Smart follow mode - pathfinding around obstacles
+            // Smart follow mode - simple obstacle avoidance (optimized)
             else if (window.botsSmartFollow && pointingOnPosition.x !== undefined) {
                 const targetX = pointingOnPosition.x;
                 const targetY = pointingOnPosition.y;
                 const distToTarget = Math.hypot(bot.x - targetX, bot.y - targetY);
                 
                 if (distToTarget < 80) {
-                    // Close enough, stop
                     send(['9', []]);
                 } else {
-                    // Combine all obstacles: player objects + natural resources
-                    const allObstacles = [
-                        ...window.gameObjects,
-                        ...treeList.map(t => ({ x: t.x, y: t.y, scale: 100, type: 'tree' })),
-                        ...stoneList.map(s => ({ x: s.x, y: s.y, scale: 80, type: 'stone' })),
-                        ...goldList.map(g => ({ x: g.x, y: g.y, scale: 80, type: 'gold' }))
-                    ];
+                    // Simple direct movement - no heavy pathfinding
+                    const directAngle = Math.atan2(targetY - bot.y, targetX - bot.x);
                     
-                    // Use pathfinder to navigate
-                    const move = pathfinder.getNextMove(bot.x, bot.y, targetX, targetY, allObstacles);
+                    // Quick check for nearby blocking objects (only player objects, limit 20)
+                    let blocked = null;
+                    const nearbyObjs = window.gameObjects.slice(0, 50);
+                    for (const obj of nearbyObjs) {
+                        if (!obj) continue;
+                        const checkX = bot.x + Math.cos(directAngle) * 60;
+                        const checkY = bot.y + Math.sin(directAngle) * 60;
+                        const dist = Math.hypot(checkX - obj.x, checkY - obj.y);
+                        if (dist < (obj.scale || 50) + 40) {
+                            blocked = obj;
+                            break;
+                        }
+                    }
                     
-                    if (move.attack) {
-                        // Need to destroy blocking object
-                        const attackAngle = move.angle;
-                        send(['D', [attackAngle]]); // Look at object
-                        send(['9', [attackAngle]]); // Move towards it
-                        send(['F', [1, attackAngle]]); // Attack it
-                        
-                        // Store attack state for this bot
+                    if (blocked) {
+                        // Attack blocking object
+                        const attackAngle = Math.atan2(blocked.y - bot.y, blocked.x - bot.x);
+                        send(['D', [attackAngle]]);
+                        send(['9', [attackAngle]]);
+                        send(['F', [1, attackAngle]]);
                         botWs.smartAttacking = true;
                     } else {
-                        // Path is clear or found alternative route
                         if (botWs.smartAttacking) {
-                            send(['F', [0]]); // Stop attacking
+                            send(['F', [0]]);
                             botWs.smartAttacking = false;
                         }
-                        send(['9', [move.angle]]);
+                        send(['9', [directAngle]]);
                     }
                 }
             }
