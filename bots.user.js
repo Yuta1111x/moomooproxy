@@ -100,56 +100,94 @@ CanvasRenderingContext2D.prototype.moveTo = new Proxy(CanvasRenderingContext2D.p
     }
 });
 
+// ============ PLAYER ID DISPLAY ============
+// Store player names from game
+window.playerNames = {}; // id -> name
+
+// Hook strokeText to capture and modify player names (game uses strokeText for names)
+const originalStrokeText = CanvasRenderingContext2D.prototype.strokeText;
+const originalFillText = CanvasRenderingContext2D.prototype.fillText;
+
+CanvasRenderingContext2D.prototype.strokeText = function(text, x, y, maxWidth) {
+    if (window.showPlayerIds && text && typeof text === 'string' && text.length > 0 && text.length < 25) {
+        // Check if this is a player name (not a number, resource count, etc)
+        if (!/^[\d,]+$/.test(text) && !text.includes(':') && !text.startsWith('[')) {
+            // Find player by checking if any player is near this screen position
+            const players = window.players || {};
+            for (const id in players) {
+                const name = window.playerNames[id];
+                if (name === text) {
+                    text = `[${id}] ${text}`;
+                    break;
+                }
+            }
+        }
+    }
+    return originalStrokeText.call(this, text, x, y, maxWidth);
+};
+
+CanvasRenderingContext2D.prototype.fillText = function(text, x, y, maxWidth) {
+    if (window.showPlayerIds && text && typeof text === 'string' && text.length > 0 && text.length < 25) {
+        if (!/^[\d,]+$/.test(text) && !text.includes(':') && !text.startsWith('[')) {
+            const players = window.players || {};
+            for (const id in players) {
+                const name = window.playerNames[id];
+                if (name === text) {
+                    text = `[${id}] ${text}`;
+                    break;
+                }
+            }
+        }
+    }
+    return originalFillText.call(this, text, x, y, maxWidth);
+};
+
 // ============ ANTI-KICK / XSS PROTECTION ============
-// Block malicious chat messages that try to crash/kick players
+// Block malicious CHAT messages that try to crash/kick players
 (function() {
-    // Dangerous patterns to block
+    // Dangerous patterns to block (only in chat messages)
     const DANGEROUS_PATTERNS = [
         /<iframe/i, /<script/i, /<svg/i, /<img/i, /<style/i,
         /onload=/i, /onerror=/i, /onclick=/i, /onmouseover=/i,
         /javascript:/i, /throw\(\)/i, /while\(1\)/i, /alert\(/i,
-        /eval\(/i, /document\./i, /window\./i, /io\.send/i,
-        /display:\s*none/i, /<embed/i, /<object/i, /<meta/i,
-        /<link/i, /<base/i, /src\s*=/i, /href\s*=/i
+        /eval\(/i, /io\.send/i, /display:\s*none/i,
+        /<embed/i, /<object/i, /<meta/i, /<link/i, /<base/i
     ];
     
-    // Sanitize message - remove dangerous content
+    // Check if message contains dangerous content
+    const isDangerous = (msg) => {
+        if (typeof msg !== 'string') return false;
+        for (const pattern of DANGEROUS_PATTERNS) {
+            if (pattern.test(msg)) return true;
+        }
+        return false;
+    };
+    
+    // Sanitize chat message - remove dangerous content
     const sanitizeMessage = (msg) => {
         if (typeof msg !== 'string') return msg;
-        for (const pattern of DANGEROUS_PATTERNS) {
-            if (pattern.test(msg)) {
-                console.log('[AntiKick] Blocked malicious message:', msg.substring(0, 50));
-                return '[blocked]';
-            }
+        if (isDangerous(msg)) {
+            console.log('[AntiKick] Blocked malicious chat:', msg.substring(0, 50));
+            return '[blocked]';
         }
         return msg;
     };
     
-    // Hook innerHTML to prevent XSS
-    const originalInnerHTML = Object.getOwnPropertyDescriptor(Element.prototype, 'innerHTML');
-    Object.defineProperty(Element.prototype, 'innerHTML', {
-        set(value) {
-            if (typeof value === 'string') {
-                for (const pattern of DANGEROUS_PATTERNS) {
-                    if (pattern.test(value)) {
-                        console.log('[AntiKick] Blocked innerHTML XSS');
-                        return;
-                    }
-                }
-            }
-            return originalInnerHTML.set.call(this, value);
-        },
-        get() { return originalInnerHTML.get.call(this); }
-    });
+    // Store original for chat sanitization
+    window.sanitizeMessage = sanitizeMessage;
+    window.isDangerousMessage = isDangerous;
     
-    // Block eval
+    // Block eval (still needed for security)
     const originalEval = window.eval;
     window.eval = function(code) {
-        console.log('[AntiKick] Blocked eval attempt');
-        return null;
+        if (typeof code === 'string' && isDangerous(code)) {
+            console.log('[AntiKick] Blocked eval attempt');
+            return null;
+        }
+        return originalEval.call(this, code);
     };
     
-    // Block Function constructor exploits
+    // Block Function constructor exploits (still needed)
     const originalFunction = window.Function;
     window.Function = function(...args) {
         const code = args.join(' ');
@@ -160,8 +198,7 @@ CanvasRenderingContext2D.prototype.moveTo = new Proxy(CanvasRenderingContext2D.p
         return originalFunction.apply(this, args);
     };
     
-    window.sanitizeMessage = sanitizeMessage;
-    console.log('[AntiKick] Protection enabled');
+    console.log('[AntiKick] Chat protection enabled');
 })();
 
 // Internal config (do not modify) - yuta: 1
@@ -474,7 +511,14 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
                 </div>
                 <div class="mm-toggle-row">
                     <span class="mm-toggle-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v4"/><path d="M12 18v4"/><path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/><path d="M2 12h4"/><path d="M18 12h4"/></svg> AutoAim (bots)</span>
-                    <div class="mm-toggle" id="togAutoAim"></div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <input type="text" id="autoAimTargetId" placeholder="ID" style="width:45px;height:24px;text-align:center;background:rgba(139,0,0,0.2);border:1px solid rgba(139,0,0,0.4);border-radius:4px;color:#fff;font-size:11px;">
+                        <div class="mm-toggle" id="togAutoAim"></div>
+                    </div>
+                </div>
+                <div class="mm-toggle-row">
+                    <span class="mm-toggle-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg> Show Player IDs</span>
+                    <div class="mm-toggle on" id="togShowIds"></div>
                 </div>
                 <div class="mm-toggle-row">
                     <span class="mm-toggle-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Sync Attack</span>
@@ -599,10 +643,11 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
     };
     const saveSettings = () => {
         const settings = {};
-        ['botsCopyActions', 'botsCopyDir', 'botsCopyMove', 'botsAutoUpgrade', 'skipUpgrade', 'autoHealMe', 'autoHealBots', 'botsAutoAim', 'syncAttackEnabled'].forEach(k => {
+        ['botsCopyActions', 'botsCopyDir', 'botsCopyMove', 'botsAutoUpgrade', 'skipUpgrade', 'autoHealMe', 'autoHealBots', 'botsAutoAim', 'showPlayerIds', 'syncAttackEnabled'].forEach(k => {
             settings[k] = window[k];
         });
         settings.syncKey = window.syncKey;
+        settings.autoAimTargetId = window.autoAimTargetId || '';
         localStorage.setItem('multibox_settings', JSON.stringify(settings));
     };
     const savedSettings = loadSettings();
@@ -651,7 +696,21 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
     setupToggle('togAutoHealMe', 'autoHealMe', true);
     setupToggle('togAutoHealBots', 'autoHealBots', true);
     setupToggle('togAutoAim', 'botsAutoAim', false);
+    setupToggle('togShowIds', 'showPlayerIds', true);
     setupToggle('togSync', 'syncAttackEnabled', false);
+    
+    // AutoAim target ID input
+    const autoAimIdInput = getEl('autoAimTargetId');
+    if (autoAimIdInput) {
+        autoAimIdInput.value = savedSettings.autoAimTargetId || '';
+        window.autoAimTargetId = savedSettings.autoAimTargetId ? parseInt(savedSettings.autoAimTargetId) : null;
+        autoAimIdInput.addEventListener('input', () => {
+            const val = autoAimIdInput.value.trim();
+            window.autoAimTargetId = val ? parseInt(val) : null;
+            saveSettings();
+            console.log(`[MultiBox] AutoAim target ID: ${window.autoAimTargetId || 'nearest enemy'}`);
+        });
+    }
     
     // Clear recording button
     getEl('btnClearRec').onclick = () => {
@@ -740,6 +799,8 @@ window.botsStay = false;
 window.playerFollowerGlobal = true;
 window.botsCursorFollow = false;
 window.botsAutoAim = false;
+window.autoAimTargetId = null; // Target specific player ID
+window.showPlayerIds = true; // Show [ID] next to player names
 window.syncAttackEnabled = false;
 window.syncCooldown = false;
 
@@ -999,6 +1060,11 @@ let followingfarm = false, followingtype = null;
 let pointer = true, pointingOnPosition = {};
 let friend = [], LED = Date.now();
 
+// Player movement tracking for smart follow
+let lastPlayerPos = { x: 0, y: 0 };
+let playerIsMoving = false;
+let playerStoppedTime = 0;
+
 // ============ UTILITY FUNCTIONS ============
 const dist = (a, b) => Math.sqrt(Math.pow(b.y - a[2], 2) + Math.pow(b.x - a[1], 2));
 const toRad = angle => angle * (Math.PI / 180);
@@ -1011,58 +1077,52 @@ const sendForAll = (e, count) => {
 };
 
 // ============ AUTO HEAL SYSTEM ============
-// Food healing values: apple=20, cookie=40, cheese=30
-const FOOD_HEALING = { 0: 20, 1: 40, 2: 30 }; // foodType -> healing
+// Simple: HP < 80 = heal, 150ms delay
+const FOOD_HEALING = { 0: 20, 1: 40, 2: 30 };
 window.autoHealMe = true;
 window.autoHealBots = true;
 window.playerHealth = 100;
-window.playerShameCount = 0;
 
-// Place food for player (like script.js je(0, dir))
+let lastPlayerHealTime = 0;
+let lastBotHealTimes = {};
+const HEAL_DELAY = 150; // 150ms between heals
+
+// Place food for player
 const placeFood = (direction) => {
     if (!ws?.oldSend) return;
-    // Select food item (slot 0)
     ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [foodType]]))));
-    // Place it
     ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [1, direction]]))));
-    // Deselect
     ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['F', [0]]))));
-    // Switch back to weapon
     ws.oldSend(new Uint8Array(Array.from(msgpack5.encode(['z', [primary, 1]]))));
 };
 
-// Calculate how many food needed to full heal
-const getFoodNeeded = (health, foodHeal) => {
-    if (health >= 100) return 0;
-    return Math.ceil((100 - health) / foodHeal);
-};
-
-// Auto heal player when damaged
+// Simple auto heal player - HP < 80 = heal
 const autoHealPlayer = () => {
-    if (!window.autoHealMe || window.playerHealth >= 100) return;
-    if (window.playerShameCount >= 5) return; // Don't spam if shamed
+    if (!window.autoHealMe || window.playerHealth >= 80) return;
     
-    const healing = FOOD_HEALING[foodType] || 20;
-    const needed = getFoodNeeded(window.playerHealth, healing);
+    const now = Date.now();
+    if (now - lastPlayerHealTime < HEAL_DELAY) return;
     
-    for (let i = 0; i < needed; i++) {
-        placeFood(dir);
-    }
+    placeFood(dir);
+    lastPlayerHealTime = now;
 };
 
-// Auto heal bot
+// Simple auto heal bot - HP < 80 = heal
 const autoHealBot = (botWs, botHealth, botFoodType, botDir) => {
-    if (!window.autoHealBots || botHealth >= 100) return;
+    if (!window.autoHealBots || botHealth >= 80) return;
     
-    const healing = FOOD_HEALING[botFoodType] || 20;
-    const needed = getFoodNeeded(botHealth, healing);
+    const now = Date.now();
+    const botId = botWs.botId;
+    if (!botId) return;
+    
+    const lastHeal = lastBotHealTimes[botId] || 0;
+    if (now - lastHeal < HEAL_DELAY) return;
+    
     const send = e => botWs.oldSend(new Uint8Array(Array.from(msgpack5.encode(e))));
-    
-    for (let i = 0; i < needed; i++) {
-        send(['z', [botFoodType]]);
-        send(['F', [1, botDir]]);
-        send(['F', [0]]);
-    }
+    send(['z', [botFoodType]]);
+    send(['F', [1, botDir]]);
+    send(['F', [0]]);
+    lastBotHealTimes[botId] = now;
 };
 
 // ============ ALTCHA TOKEN GENERATOR ============
@@ -1072,6 +1132,11 @@ class Alt {
         this.token_encode = "IWZ1bmN0aW9uKCl7InVzZSBzdHJpY3QiO2xldCBlPW5ldyBUZXh0RW5jb2Rlcjthc3luYyBmdW5jdGlvbiB0KHQsbixyKXt2YXIgbDtyZXR1cm4gbD1hd2FpdCBjcnlwdG8uc3VidGxlLmRpZ2VzdChyLnRvVXBwZXJDYXNlKCksZS5lbmNvZGUodCtuKSksWy4uLm5ldyBVaW50OEFycmF5KGwpXS5tYXAoZT0+ZS50b1N0cmluZygxNikucGFkU3RhcnQoMiwiMCIpKS5qb2luKCIiKX1mdW5jdGlvbiBuKGUsdD0xMil7bGV0IG49bmV3IFVpbnQ4QXJyYXkodCk7Zm9yKGxldCByPTA7cjx0O3IrKyluW3JdPWUlMjU2LGU9TWF0aC5mbG9vcihlLzI1Nik7cmV0dXJuIG59YXN5bmMgZnVuY3Rpb24gcih0LHI9IiIsbD0xZTYsbz0wKXtsZXQgYT0iQUVTLUdDTSIsYz1uZXcgQWJvcnRDb250cm9sbGVyLGk9RGF0ZS5ub3coKSx1PShhc3luYygpPT57Zm9yKGxldCBlPW87ZTw9bCYmIWMuc2lnbmFsLmFib3J0ZWQmJnMmJnM7ZSsrKXRyeXtsZXQgdD1hd2FpdCBjcnlwdG8uc3VidGxlLmRlY3J5cHQoe25hbWU6YSxpdjpuKGUpfSxzLHcpO2lmKHQpcmV0dXJue2NsZWFyVGV4dDpuZXcgVGV4dERlY29kZXIoKS5kZWNvZGUodCksdG9vazpEYXRlLm5vdygpLWl9fWNhdGNoe31yZXR1cm4gbnVsbH0pKCkscz1udWxsLHc9bnVsbDt0cnl7dz1mdW5jdGlvbiBlKHQpe2xldCBuPWF0b2IodCkscj1uZXcgVWludDhBcnJheShuLmxlbmd0aCk7Zm9yKGxldCBsPTA7bDxuLmxlbmd0aDtsKyspcltsXT1uLmNoYXJDb2RlQXQobCk7cmV0dXJuIHJ9KHQpO2xldCBmPWF3YWl0IGNyeXB0by5zdWJ0bGUuZGlnZXN0KCJTSEEtMjU2IixlLmVuY29kZShyKSk7cz1hd2FpdCBjcnlwdG8uc3VidGxlLmltcG9ydEtleSgicmF3IixmLGEsITEsWyJkZWNyeXB0Il0pfWNhdGNoe3JldHVybntwcm9taXNlOlByb21pc2UucmVqZWN0KCksY29udHJvbGxlcjpjfX1yZXR1cm57cHJvbWlzZTp1LGNvbnRyb2xsZXI6Y319bGV0IGw7b25tZXNzYWdlPWFzeW5jIGU9PntsZXR7dHlwZTpuLHBheWxvYWQ6byxzdGFydDphLG1heDpjfT1lLmRhdGEsaT1udWxsO2lmKCJhYm9ydCI9PT1uKWwmJmwuYWJvcnQoKSxsPXZvaWQgMDtlbHNlIGlmKCJ3b3JrIj09PW4pe2lmKCJvYmZ1c2NhdGVkImluIG8pe2xldHtrZXk6dSxvYmZ1c2NhdGVkOnN9PW98fHt9O2k9YXdhaXQgcihzLHUsYyxhKX1lbHNle2xldHthbGdvcml0aG06dyxjaGFsbGVuZ2U6ZixzYWx0OmR9PW98fHt9O2k9ZnVuY3Rpb24gZShuLHIsbD0iU0hBLTI1NiIsbz0xZTYsYT0wKXtsZXQgYz1uZXcgQWJvcnRDb250cm9sbGVyLGk9RGF0ZS5ub3coKSx1PShhc3luYygpPT57Zm9yKGxldCBlPWE7ZTw9byYmIWMuc2lnbmFsLmFib3J0ZWQ7ZSsrKXtsZXQgdT1hd2FpdCB0KHIsZSxsKTtpZih1PT09bilyZXR1cm57bnVtYmVyOmUsdG9vazpEYXRlLm5vdygpLWl9fXJldHVybiBudWxsfSkoKTtyZXR1cm57cHJvbWlzZTp1LGNvbnRyb2xsZXI6Y319KGYsZCx3LGMsYSl9bD1pLmNvbnRyb2xsZXIsaS5wcm9taXNlLnRoZW4oZT0+e3NlbGYucG9zdE1lc3NhZ2UoZSYmey4uLmUsd29ya2VyOiEwfSl9KX19fSgpOw==";
         this.toBytes = b64 => Uint8Array.from(atob(b64), c => c.charCodeAt(0));
         this.workerBlob = new Blob([this.toBytes(this.token_encode)], { type: "text/javascript;charset=utf-8" });
+        
+        // Token timeout system - prevent spamming SHA
+        this.lastTokenTime = 0;
+        this.tokenTimeout = 5000; // 5 seconds between token generations
+        this.generatingToken = false;
     }
     static createPayload(Data, Date_) {
         return btoa(JSON.stringify({ algorithm: Data.algorithm, challenge: Data.challenge, number: Date_.number, salt: Data.salt, signature: Data.signature, took: Date_.took }));
@@ -1092,9 +1157,36 @@ class Alt {
         return result.find(r => !!r);
     }
     async generate() {
-        const data = await this.getChallenge();
-        const { solution } = await this.validateChallenge(data);
-        return `alt:${Alt.createPayload(data, solution)}`;
+        // Enforce timeout to prevent spamming
+        const now = Date.now();
+        const timeSinceLastToken = now - this.lastTokenTime;
+        
+        if (this.generatingToken) {
+            console.log('[Altcha] Token generation already in progress, waiting...');
+            // Wait for current generation to finish
+            while (this.generatingToken) {
+                await new Promise(r => setTimeout(r, 100));
+            }
+        }
+        
+        if (timeSinceLastToken < this.tokenTimeout) {
+            const waitTime = this.tokenTimeout - timeSinceLastToken;
+            console.log(`[Altcha] Timeout: waiting ${Math.ceil(waitTime/1000)}s before next token...`);
+            await new Promise(r => setTimeout(r, waitTime));
+        }
+        
+        this.generatingToken = true;
+        this.lastTokenTime = Date.now();
+        
+        try {
+            const data = await this.getChallenge();
+            const { solution } = await this.validateChallenge(data);
+            const token = `alt:${Alt.createPayload(data, solution)}`;
+            console.log('[Altcha] Token generated successfully');
+            return token;
+        } finally {
+            this.generatingToken = false;
+        }
     }
     async validateChallenge(data) {
         const solution = await this.getWorkerSolution(data, data.maxnumber);
@@ -1151,35 +1243,24 @@ window.spawnBots = async count => {
         return;
     }
     
-    const BATCH_SIZE = 5;
-    let totalSpawned = 0;
-    let remaining = canSpawn;
-    
-    console.log(`[MultiBox] Spawning ${canSpawn} bots in batches of ${BATCH_SIZE}...`);
+    console.log(`[MultiBox] Spawning ${canSpawn} bots (1 every 5s)...`);
     window.botsInQueue += canSpawn;
     
-    // Pre-generate first batch tokens
-    let nextTokens = await Promise.all(
-        Array(Math.min(BATCH_SIZE, remaining)).fill().map(() => altcha.generate())
-    );
-    
-    while (remaining > 0) {
-        const batchSize = Math.min(BATCH_SIZE, remaining);
-        const currentTokens = nextTokens;
+    // Simple spawn - 1 bot every 5 seconds
+    for (let i = 0; i < canSpawn; i++) {
+        const slot = getNextAvailableSlot();
+        if (!slot) { 
+            window.botsInQueue = Math.max(0, window.botsInQueue - 1); 
+            continue; 
+        }
         
-        // Start generating next batch tokens in background
-        const nextBatchSize = Math.min(BATCH_SIZE, remaining - batchSize);
-        const nextTokensPromise = nextBatchSize > 0 
-            ? Promise.all(Array(nextBatchSize).fill().map(() => altcha.generate()))
-            : Promise.resolve([]);
-        
-        // Spawn current batch instantly
-        for (let i = 0; i < batchSize; i++) {
-            const slot = getNextAvailableSlot();
-            if (!slot) { window.botsInQueue = Math.max(0, window.botsInQueue - 1); continue; }
-            
-            const token = currentTokens[i];
-            if (!token) { window.botsInQueue = Math.max(0, window.botsInQueue - 1); continue; }
+        try {
+            console.log(`[MultiBox] Generating token for bot ${i + 1}/${canSpawn}...`);
+            const token = await altcha.generate();
+            if (!token) { 
+                window.botsInQueue = Math.max(0, window.botsInQueue - 1); 
+                continue; 
+            }
             
             const targetUrl = `${urlBase}token=${encodeURIComponent(token)}`;
             
@@ -1191,19 +1272,20 @@ window.spawnBots = async count => {
                 wsType(`${slot.proxy}/?target=${encodeURIComponent(targetUrl)}`, slot.proxy);
             }
             
-            totalSpawned++;
             window.botsInQueue = Math.max(0, window.botsInQueue - 1);
-        }
-        
-        remaining -= batchSize;
-        
-        // Wait for next batch tokens (should be ready by now)
-        if (remaining > 0) {
-            nextTokens = await nextTokensPromise;
+            console.log(`[MultiBox] Bot ${i + 1} joined!`);
+            
+            // Wait 2 seconds before next bot (except for last one)
+            if (i < canSpawn - 1) {
+                await new Promise(r => setTimeout(r, 2000));
+            }
+        } catch (e) {
+            console.error(`[MultiBox] Failed to spawn bot ${i + 1}:`, e);
+            window.botsInQueue = Math.max(0, window.botsInQueue - 1);
         }
     }
     
-    console.log(`[MultiBox] Spawned ${totalSpawned} bots`);
+    console.log(`[MultiBox] Done spawning bots`);
 };
 
 window.disconnectAll = () => {
@@ -1324,6 +1406,14 @@ const handleMessage = e => {
     let data = temp.length > 1 ? [temp[0], ...temp[1]] : temp;
     if (!data) return;
     const item = data[0];
+    
+    // Anti-Kick: Sanitize chat messages (packet "ch" = [sid, message])
+    if (item === "ch" && data[2] && window.isDangerousMessage) {
+        if (window.isDangerousMessage(data[2])) {
+            console.log('[AntiKick] Blocked malicious chat from player:', data[1]);
+            return; // Block the entire message
+        }
+    }
 
     if (item === "io-init") {
         const ts = getEl('touch-controls-fullscreen');
@@ -1343,15 +1433,27 @@ const handleMessage = e => {
                 LED = Date.now();
                 // Always send direction for main player
                 doNewSend(["D", [dir]]);
-                // AutoAim - bots always look at nearest enemy
-                if (window.botsAutoAim && nearestEnemy) {
-                    for (let id in sockets) {
-                        const bot = bots[id];
-                        if (bot && sockets[id]?.connected) {
-                            const enemyX = nearestEnemy[1];
-                            const enemyY = nearestEnemy[2];
-                            const botDir = Math.atan2(enemyY - bot.y, enemyX - bot.x);
-                            sockets[id].oldSend(new Uint8Array(Array.from(msgpack5.encode(["D", [botDir]]))));
+                // AutoAim - bots look at target ID or nearest enemy
+                if (window.botsAutoAim) {
+                    let targetEnemy = null;
+                    
+                    // If specific ID is set, find that player
+                    if (window.autoAimTargetId && players[window.autoAimTargetId]) {
+                        const p = players[window.autoAimTargetId];
+                        targetEnemy = [p.id, p.x, p.y];
+                    } else if (nearestEnemy) {
+                        targetEnemy = nearestEnemy;
+                    }
+                    
+                    if (targetEnemy) {
+                        for (let id in sockets) {
+                            const bot = bots[id];
+                            if (bot && sockets[id]?.connected) {
+                                const enemyX = targetEnemy[1];
+                                const enemyY = targetEnemy[2];
+                                const botDir = Math.atan2(enemyY - bot.y, enemyX - bot.x);
+                                sockets[id].oldSend(new Uint8Array(Array.from(msgpack5.encode(["D", [botDir]]))));
+                            }
                         }
                     }
                 }
@@ -1453,19 +1555,38 @@ const handleMessage = e => {
         const h = setInterval(() => { if (getEl('mainMenu').style.display === "block") { clearInterval(h); getEl('mainMenu').style.display = "none"; } });
     }
 
+    // Player list with names (packet "N" = [[id, name, ...], ...])
+    if (item === "N") {
+        for (const p of data[1]) {
+            if (p && p[0] !== undefined && p[1]) {
+                window.playerNames[p[0]] = p[1]; // Store id -> name
+            }
+        }
+    }
+    
     if (item === "a") {
         enemiesNear = []; players = {};
         for (let i = 0; i < data[1].length / 13; i++) {
             const info = data[1].slice(13*i, 13*i+13);
             if (info[0] === myPlayer.id) Object.assign(myPlayer, { x: info[1], y: info[2], dir: info[3], clan: info[7], hat: info[9], acc: info[10] });
             else if (info[7] !== myPlayer.clan || info[7] === null) enemiesNear.push(info);
-            players[info[0]] = { id: info[0], x: info[1], y: info[2], clan: info[7] };
+            players[info[0]] = { id: info[0], x: info[1], y: info[2], clan: info[7], name: window.playerNames[info[0]] };
         }
         if (enemiesNear.length) {
             nearestEnemy = enemiesNear.sort((a, b) => dist(a, myPlayer) - dist(b, myPlayer))[0];
             if (nearestEnemy) nearestEnemyAngle = Math.atan2(nearestEnemy[2] - myPlayer.y, nearestEnemy[1] - myPlayer.x);
         }
         if (pointer) pointingOnPosition = { x: myPlayer.x, y: myPlayer.y };
+        
+        // Track player movement
+        const playerMoved = Math.hypot(myPlayer.x - lastPlayerPos.x, myPlayer.y - lastPlayerPos.y) > 5;
+        if (playerMoved) {
+            playerIsMoving = true;
+            playerStoppedTime = Date.now();
+        } else if (Date.now() - playerStoppedTime > 200) {
+            playerIsMoving = false;
+        }
+        lastPlayerPos = { x: myPlayer.x, y: myPlayer.y };
     }
 
     if (item === "V") {
@@ -1491,11 +1612,10 @@ const handleMessage = e => {
         
         // Check if this is our player
         if (sid === myPlayer.id) {
-            const oldHealth = window.playerHealth;
             window.playerHealth = newHealth;
             
-            // Auto heal if damaged
-            if (newHealth < oldHealth && newHealth < 100) {
+            // Simple auto heal - HP < 80 = heal
+            if (newHealth < 80) {
                 autoHealPlayer();
             }
         }
@@ -1634,6 +1754,7 @@ function wsType(url, proxyUrl) {
         
         if (item === "C" && !bot.id) {
             bot.id = data[1];
+            botWs.botId = data[1]; // Store bot ID for auto heal
             sockets[data[1]] = botWs;
             bots[data[1]] = bot;
         }
@@ -1674,144 +1795,151 @@ function wsType(url, proxyUrl) {
                 const targetY = pointingOnPosition.y;
                 const distToTarget = Math.hypot(bot.x - targetX, bot.y - targetY);
                 
-                // Calculate ideal position around player (spread out in circle)
-                const botIndex = Object.keys(bots).indexOf(String(bot.id));
-                const totalBots = Object.keys(bots).length || 1;
-                const spreadAngle = (botIndex / totalBots) * Math.PI * 2;
-                const idealDist = 70; // Distance from player
-                const idealX = targetX + Math.cos(spreadAngle) * idealDist;
-                const idealY = targetY + Math.sin(spreadAngle) * idealDist;
-                const distToIdeal = Math.hypot(bot.x - idealX, bot.y - idealY);
-                
-                if (distToTarget < 100 && distToIdeal < 30) {
-                    // Close to ideal position - stop
+                // SIMPLE RULE: If bot is within 300 units of player - STOP completely
+                if (distToTarget < 300) {
                     send(['9', []]);
                     if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
-                } else if (distToTarget < 100) {
-                    // Near player but not in ideal spot - move to spread position
-                    const moveAngle = Math.atan2(idealY - bot.y, idealX - bot.x);
-                    send(['9', [moveAngle]]);
+                    botWs.stuckCount = 0;
                 } else {
+                    // SMART PATHFINDING v2
+                    const DANGEROUS_TYPES = [6, 7, 8, 9, 15];
                     const directAngle = Math.atan2(targetY - bot.y, targetX - bot.x);
                     
-                    // Check for obstacles in path (trees, stones, buildings, SPIKES)
-                    let blocked = null;
-                    let minBlockDist = Infinity;
-                    let isDangerous = false; // Spike/trap detection
-                    let isEnemyTrap = false; // Enemy trap - need to destroy
+                    // Collect all obstacles
+                    const obstacles = [];
                     
-                    // Spike types: 6=spike, 7=greater spike, 8=poison spike, 9=spinning spike
-                    // Also check pit traps (type 15)
-                    const DANGEROUS_TYPES = [6, 7, 8, 9, 15];
-                    
-                    // Check player objects (buildings, spikes, traps)
-                    for (let i = 0; i < Math.min(window.gameObjects.length, 50); i++) {
-                        const obj = window.gameObjects[i];
+                    // Game objects (buildings, spikes)
+                    for (const obj of window.gameObjects.slice(0, 50)) {
                         if (!obj) continue;
-                        
                         const isSpike = DANGEROUS_TYPES.includes(obj.type);
-                        
-                        // Check if this is OUR trap or TEAMMATE trap (ignore it)
-                        const isOurTrap = obj.owner === myPlayer.id || obj.owner === bot.id;
-                        const isTeammateTrap = myPlayer.clan && players[obj.owner]?.clan === myPlayer.clan;
-                        const isFriendlyTrap = isOurTrap || isTeammateTrap;
-                        
-                        // Skip friendly traps - don't avoid them
-                        if (isSpike && isFriendlyTrap) continue;
-                        
-                        const avoidRadius = isSpike ? 100 : 50;
-                        
-                        // Check current position (immediate danger from ENEMY trap)
-                        const distNow = Math.hypot(bot.x - obj.x, bot.y - obj.y);
-                        if (isSpike && distNow < (obj.scale || 50) + 50) {
-                            // STUCK IN ENEMY TRAP - DESTROY IT!
-                            blocked = obj;
-                            minBlockDist = 0;
-                            isDangerous = true;
-                            isEnemyTrap = true;
+                        const isOwn = obj.owner === myPlayer.id || obj.owner === bot.id;
+                        const isTeammate = myPlayer.clan && players[obj.owner]?.clan === myPlayer.clan;
+                        if (isSpike && (isOwn || isTeammate)) continue;
+                        obstacles.push({ x: obj.x, y: obj.y, r: (obj.scale || 50) + 35, dangerous: isSpike, obj });
+                    }
+                    
+                    // Trees and stones
+                    for (const t of treeList.slice(0, 15)) obstacles.push({ x: t.x, y: t.y, r: 110, dangerous: false });
+                    for (const s of stoneList.slice(0, 15)) obstacles.push({ x: s.x, y: s.y, r: 90, dangerous: false });
+                    
+                    // Check if stuck in enemy trap
+                    let stuckInTrap = null;
+                    for (const o of obstacles) {
+                        if (o.dangerous && Math.hypot(bot.x - o.x, bot.y - o.y) < o.r - 20) {
+                            stuckInTrap = o;
                             break;
                         }
-                        
-                        // Check path ahead
-                        const checkX = bot.x + Math.cos(directAngle) * 80;
-                        const checkY = bot.y + Math.sin(directAngle) * 80;
-                        const dist = Math.hypot(checkX - obj.x, checkY - obj.y);
-                        if (dist < (obj.scale || 50) + avoidRadius && dist < minBlockDist) {
-                            blocked = obj;
-                            minBlockDist = dist;
-                            isDangerous = isSpike;
-                            isEnemyTrap = isSpike && !isFriendlyTrap;
-                        }
                     }
                     
-                    // Check trees
-                    for (let i = 0; i < Math.min(treeList.length, 20); i++) {
-                        const tree = treeList[i];
-                        const checkX = bot.x + Math.cos(directAngle) * 80;
-                        const checkY = bot.y + Math.sin(directAngle) * 80;
-                        const dist = Math.hypot(checkX - tree.x, checkY - tree.y);
-                        if (dist < 120 && dist < minBlockDist) {
-                            blocked = { x: tree.x, y: tree.y, scale: 100, type: 'tree' };
-                            minBlockDist = dist;
-                        }
-                    }
-                    
-                    // Check stones
-                    for (let i = 0; i < Math.min(stoneList.length, 20); i++) {
-                        const stone = stoneList[i];
-                        const checkX = bot.x + Math.cos(directAngle) * 80;
-                        const checkY = bot.y + Math.sin(directAngle) * 80;
-                        const dist = Math.hypot(checkX - stone.x, checkY - stone.y);
-                        if (dist < 100 && dist < minBlockDist) {
-                            blocked = { x: stone.x, y: stone.y, scale: 80, type: 'stone' };
-                            minBlockDist = dist;
-                        }
-                    }
-                    
-                    // Check for other bots and player (anti-push)
-                    let tooCloseToAlly = false;
-                    const checkX = bot.x + Math.cos(directAngle) * 50;
-                    const checkY = bot.y + Math.sin(directAngle) * 50;
-                    
-                    // Don't push player
-                    const distToPlayer = Math.hypot(checkX - myPlayer.x, checkY - myPlayer.y);
-                    if (distToPlayer < 50) tooCloseToAlly = true;
-                    
-                    // Don't push other bots
-                    for (const id in bots) {
-                        if (id == bot.id) continue;
-                        const otherBot = bots[id];
-                        if (otherBot) {
-                            const distToBot = Math.hypot(checkX - otherBot.x, checkY - otherBot.y);
-                            if (distToBot < 40) { tooCloseToAlly = true; break; }
-                        }
-                    }
-                    
-                    if (isDangerous && blocked && isEnemyTrap) {
-                        // STUCK IN ENEMY TRAP - DESTROY IT!
-                        const attackAngle = Math.atan2(blocked.y - bot.y, blocked.x - bot.x);
-                        send(['D', [attackAngle]]);
-                        send(['9', []]); // Stop moving
-                        send(['F', [1, attackAngle]]); // Attack the trap
+                    if (stuckInTrap) {
+                        // Attack trap to escape
+                        const ang = Math.atan2(stuckInTrap.y - bot.y, stuckInTrap.x - bot.x);
+                        send(['D', [ang]]);
+                        send(['9', []]);
+                        send(['F', [1, ang]]);
                         botWs.smartAttacking = true;
-                    } else if (isDangerous && blocked) {
-                        // ENEMY SPIKE AHEAD - STOP (don't walk into it)
-                        send(['9', []]);
-                        if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
-                    } else if (tooCloseToAlly) {
-                        // Too close to player/bot - stop to avoid pushing
-                        send(['9', []]);
-                    } else if (blocked) {
-                        // Regular obstacle - go around
-                        const toObstacle = Math.atan2(blocked.y - bot.y, blocked.x - bot.x);
-                        const angleDiff = directAngle - toObstacle;
-                        const avoidAngle = angleDiff > 0 ? toObstacle - Math.PI/2 : toObstacle + Math.PI/2;
-                        send(['9', [avoidAngle]]);
-                        if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
                     } else {
-                        // Clear path - go directly
-                        send(['9', [directAngle]]);
-                        if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                        // Check if direct path is clear
+                        const isPathClear = (angle, dist = 100) => {
+                            const checkX = bot.x + Math.cos(angle) * dist;
+                            const checkY = bot.y + Math.sin(angle) * dist;
+                            for (const o of obstacles) {
+                                if (Math.hypot(checkX - o.x, checkY - o.y) < o.r) return false;
+                            }
+                            // Check player/bots
+                            if (Math.hypot(checkX - myPlayer.x, checkY - myPlayer.y) < 50) return false;
+                            for (const id in bots) {
+                                if (id == bot.id) continue;
+                                const ob = bots[id];
+                                if (ob && Math.hypot(checkX - ob.x, checkY - ob.y) < 40) return false;
+                            }
+                            return true;
+                        };
+                        
+                        // Check for dangerous obstacle ahead
+                        let dangerAhead = false;
+                        const aheadX = bot.x + Math.cos(directAngle) * 80;
+                        const aheadY = bot.y + Math.sin(directAngle) * 80;
+                        for (const o of obstacles) {
+                            if (o.dangerous && Math.hypot(aheadX - o.x, aheadY - o.y) < o.r + 20) {
+                                dangerAhead = true;
+                                break;
+                            }
+                        }
+                        
+                        if (dangerAhead) {
+                            // Stop before dangerous obstacle
+                            send(['9', []]);
+                            if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                        } else if (isPathClear(directAngle)) {
+                            // Direct path clear - go straight
+                            send(['9', [directAngle]]);
+                            if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                            botWs.stuckCount = 0;
+                        } else {
+                            // Find best alternative angle
+                            let bestAngle = null;
+                            let bestScore = -Infinity;
+                            
+                            // Try multiple angles (fan search)
+                            for (let offset = 0.3; offset <= Math.PI; offset += 0.25) {
+                                for (const dir of [1, -1]) {
+                                    const testAngle = directAngle + (offset * dir);
+                                    if (isPathClear(testAngle, 80)) {
+                                        // Score based on how close to target direction
+                                        const score = Math.cos(testAngle - directAngle) * 100 - offset * 10;
+                                        if (score > bestScore) {
+                                            bestScore = score;
+                                            bestAngle = testAngle;
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            if (bestAngle !== null) {
+                                send(['9', [bestAngle]]);
+                                if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                                botWs.stuckCount = 0;
+                            } else {
+                                // No clear path - stuck!
+                                botWs.stuckCount = (botWs.stuckCount || 0) + 1;
+                                
+                                if (botWs.stuckCount > 15) {
+                                    // Really stuck - find nearest destroyable object and attack it
+                                    let nearestObj = null;
+                                    let nearestDist = Infinity;
+                                    
+                                    for (const o of obstacles) {
+                                        if (o.obj && !o.dangerous) { // Only attack non-spike objects
+                                            const d = Math.hypot(bot.x - o.x, bot.y - o.y);
+                                            if (d < nearestDist && d < 200) {
+                                                nearestDist = d;
+                                                nearestObj = o;
+                                            }
+                                        }
+                                    }
+                                    
+                                    if (nearestObj) {
+                                        // Attack the blocking object
+                                        const attackAngle = Math.atan2(nearestObj.y - bot.y, nearestObj.x - bot.x);
+                                        send(['D', [attackAngle]]);
+                                        send(['9', [attackAngle]]); // Move towards it
+                                        send(['F', [1, attackAngle]]); // Attack
+                                        botWs.smartAttacking = true;
+                                    } else {
+                                        // No object to destroy - random escape
+                                        const escapeAngle = directAngle + Math.PI + (Math.random() - 0.5);
+                                        send(['9', [escapeAngle]]);
+                                    }
+                                    
+                                    if (botWs.stuckCount > 30) botWs.stuckCount = 0;
+                                } else {
+                                    // Try perpendicular movement first
+                                    const perpAngle = directAngle + (Math.random() > 0.5 ? Math.PI/2 : -Math.PI/2);
+                                    send(['9', [perpAngle]]);
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -1848,11 +1976,10 @@ function wsType(url, proxyUrl) {
             const newHealth = data[2];
             
             if (sid === bot.id) {
-                const oldHealth = bot.health || 100;
                 bot.health = newHealth;
                 
-                // Auto heal if damaged
-                if (newHealth < oldHealth && newHealth < 100 && window.autoHealBots) {
+                // Simple auto heal - HP < 80 = heal
+                if (newHealth < 80 && window.autoHealBots) {
                     autoHealBot(botWs, newHealth, botWs.foodType || 0, bot.dir || 0);
                 }
             }
@@ -1873,7 +2000,7 @@ function wsType(url, proxyUrl) {
                 setTimeout(() => send(['H', [0]]), 100);
                 return;
             }
-            
+             
             bot.pendingAge = serverAge; // Store pending upgrade age
             
             // Try to use recorded upgrade if available
