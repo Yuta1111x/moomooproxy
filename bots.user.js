@@ -344,7 +344,6 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
             <div class="mm-section-title">Bot Mode</div>
             <div class="mm-row">
                 <button class="mm-btn" id="btnFollow"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 2px;"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg> Follow</button>
-                <button class="mm-btn" id="btnSmart"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 2px;"><path d="M12 2a10 10 0 1 0 10 10H12V2z"/><path d="M12 2a10 10 0 0 1 10 10"/><path d="M12 12l8-8"/></svg> Smart</button>
                 <button class="mm-btn" id="btnStay"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 2px;"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6"/></svg> Stay</button>
                 <button class="mm-btn" id="btnCursor"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: middle; margin-right: 2px;"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg> Cursor</button>
             </div>
@@ -507,14 +506,13 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
     getEl('btnSpawn').onclick = () => window.spawnBots?.(parseInt(slider.value) || 1);
     getEl('btnDC').onclick = () => window.disconnectAll?.();
     // Bot mode buttons with active state
-    const modeButtons = ['btnFollow', 'btnSmart', 'btnStay', 'btnCursor', 'btnWood', 'btnFood', 'btnStone', 'btnGold'];
+    const modeButtons = ['btnFollow', 'btnStay', 'btnCursor', 'btnWood', 'btnFood', 'btnStone', 'btnGold'];
     const setModeActive = (activeBtn) => {
         modeButtons.forEach(id => getEl(id)?.classList.remove('active'));
         getEl(activeBtn)?.classList.add('active');
     };
     
     getEl('btnFollow').onclick = () => { window.botCommand?.('follow'); setModeActive('btnFollow'); };
-    getEl('btnSmart').onclick = () => { window.botCommand?.('smart'); setModeActive('btnSmart'); };
     getEl('btnStay').onclick = () => { window.botCommand?.('stay'); setModeActive('btnStay'); };
     getEl('btnCursor').onclick = () => { window.botCommand?.('cursor'); setModeActive('btnCursor'); };
     getEl('btnWood').onclick = () => { window.botCommand?.('wood'); setModeActive('btnWood'); };
@@ -650,7 +648,6 @@ let treeList = [], bushList = [], stoneList = [], goldList = [];
 window.botsStay = false;
 window.playerFollowerGlobal = true;
 window.botsCursorFollow = false;
-window.botsSmartFollow = false;
 window.botsAutoAim = false;
 window.syncAttackEnabled = false;
 window.syncCooldown = false;
@@ -1163,25 +1160,21 @@ window.botCommand = cmd => {
     };
     
     if (cmd === 'follow') { 
-        window.playerFollowerGlobal = true; followingfarm = false; window.botsStay = false; window.botsCursorFollow = false; window.botsSmartFollow = false;
+        window.playerFollowerGlobal = true; followingfarm = false; window.botsStay = false; window.botsCursorFollow = false;
         stopAttack();
     }
     if (cmd === 'stay') { 
-        window.botsStay = true; window.playerFollowerGlobal = false; followingfarm = false; window.botsCursorFollow = false; window.botsSmartFollow = false;
+        window.botsStay = true; window.playerFollowerGlobal = false; followingfarm = false; window.botsCursorFollow = false;
         stopAttack();
     }
     if (cmd === 'cursor') {
-        window.botsCursorFollow = true; window.playerFollowerGlobal = false; followingfarm = false; window.botsStay = false; window.botsSmartFollow = false;
+        window.botsCursorFollow = true; window.playerFollowerGlobal = false; followingfarm = false; window.botsStay = false;
         stopAttack();
     }
-    if (cmd === 'smart') {
-        window.botsSmartFollow = true; window.playerFollowerGlobal = false; followingfarm = false; window.botsStay = false; window.botsCursorFollow = false;
-        stopAttack();
-    }
-    if (cmd === 'wood') { followingfarm = true; followingtype = 'wood'; window.botsStay = false; window.botsCursorFollow = false; window.botsSmartFollow = false; }
-    if (cmd === 'food') { followingfarm = true; followingtype = 'bush'; window.botsStay = false; window.botsCursorFollow = false; window.botsSmartFollow = false; }
-    if (cmd === 'stone') { followingfarm = true; followingtype = 'stone'; window.botsStay = false; window.botsCursorFollow = false; window.botsSmartFollow = false; }
-    if (cmd === 'gold') { followingfarm = true; followingtype = 'gold'; window.botsStay = false; window.botsCursorFollow = false; window.botsSmartFollow = false; }
+    if (cmd === 'wood') { followingfarm = true; followingtype = 'wood'; window.botsStay = false; window.botsCursorFollow = false; }
+    if (cmd === 'food') { followingfarm = true; followingtype = 'bush'; window.botsStay = false; window.botsCursorFollow = false; }
+    if (cmd === 'stone') { followingfarm = true; followingtype = 'stone'; window.botsStay = false; window.botsCursorFollow = false; }
+    if (cmd === 'gold') { followingfarm = true; followingtype = 'gold'; window.botsStay = false; window.botsCursorFollow = false; }
     console.log(`[MultiBox] Command: ${cmd}`);
 };
 
@@ -1578,57 +1571,80 @@ function wsType(url, proxyUrl) {
                 if (d < 30) send(['9', []]); // Stop when very close to cursor
                 else send(['9', [Math.atan2(cursorY - bot.y, cursorX - bot.x)]]);
             }
-            // Smart follow mode - simple obstacle avoidance (optimized)
-            else if (window.botsSmartFollow && pointingOnPosition.x !== undefined) {
-                const targetX = pointingOnPosition.x;
-                const targetY = pointingOnPosition.y;
-                const distToTarget = Math.hypot(bot.x - targetX, bot.y - targetY);
-                
-                if (distToTarget < 80) {
-                    send(['9', []]);
-                } else {
-                    // Simple direct movement - no heavy pathfinding
-                    const directAngle = Math.atan2(targetY - bot.y, targetX - bot.x);
-                    
-                    // Quick check for nearby blocking objects (only player objects, limit 20)
-                    let blocked = null;
-                    const nearbyObjs = window.gameObjects.slice(0, 50);
-                    for (const obj of nearbyObjs) {
-                        if (!obj) continue;
-                        const checkX = bot.x + Math.cos(directAngle) * 60;
-                        const checkY = bot.y + Math.sin(directAngle) * 60;
-                        const dist = Math.hypot(checkX - obj.x, checkY - obj.y);
-                        if (dist < (obj.scale || 50) + 40) {
-                            blocked = obj;
-                            break;
-                        }
-                    }
-                    
-                    if (blocked) {
-                        // Attack blocking object
-                        const attackAngle = Math.atan2(blocked.y - bot.y, blocked.x - bot.x);
-                        send(['D', [attackAngle]]);
-                        send(['9', [attackAngle]]);
-                        send(['F', [1, attackAngle]]);
-                        botWs.smartAttacking = true;
-                    } else {
-                        if (botWs.smartAttacking) {
-                            send(['F', [0]]);
-                            botWs.smartAttacking = false;
-                        }
-                        send(['9', [directAngle]]);
-                    }
-                }
-            }
             // Copy move mode - movement handled by WebSocket hook
             else if (window.botsCopyMove) {
                 // Do nothing, movement is copied from player
             }
-            // Follow mode
+            // Follow mode with smart obstacle avoidance
             else if ((botWs.playerFollower || window.playerFollowerGlobal) && !followingfarm) {
-                const d = Math.hypot(bot.x - pointingOnPosition.x, bot.y - pointingOnPosition.y);
-                if (d < 100) send(['9', []]);
-                else send(['9', [Math.atan2(pointingOnPosition.y - bot.y, pointingOnPosition.x - bot.x)]]);
+                const targetX = pointingOnPosition.x;
+                const targetY = pointingOnPosition.y;
+                const distToTarget = Math.hypot(bot.x - targetX, bot.y - targetY);
+                
+                if (distToTarget < 100) {
+                    send(['9', []]);
+                    if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                } else {
+                    const directAngle = Math.atan2(targetY - bot.y, targetX - bot.x);
+                    
+                    // Check for obstacles in path (trees, stones, buildings)
+                    let blocked = null;
+                    let minBlockDist = Infinity;
+                    
+                    // Check player objects
+                    for (let i = 0; i < Math.min(window.gameObjects.length, 30); i++) {
+                        const obj = window.gameObjects[i];
+                        if (!obj) continue;
+                        const checkDist = 80;
+                        const checkX = bot.x + Math.cos(directAngle) * checkDist;
+                        const checkY = bot.y + Math.sin(directAngle) * checkDist;
+                        const dist = Math.hypot(checkX - obj.x, checkY - obj.y);
+                        if (dist < (obj.scale || 50) + 35 && dist < minBlockDist) {
+                            blocked = obj;
+                            minBlockDist = dist;
+                        }
+                    }
+                    
+                    // Check trees
+                    for (let i = 0; i < Math.min(treeList.length, 20); i++) {
+                        const tree = treeList[i];
+                        const checkX = bot.x + Math.cos(directAngle) * 80;
+                        const checkY = bot.y + Math.sin(directAngle) * 80;
+                        const dist = Math.hypot(checkX - tree.x, checkY - tree.y);
+                        if (dist < 120 && dist < minBlockDist) {
+                            blocked = { x: tree.x, y: tree.y, scale: 100, type: 'tree' };
+                            minBlockDist = dist;
+                        }
+                    }
+                    
+                    // Check stones
+                    for (let i = 0; i < Math.min(stoneList.length, 20); i++) {
+                        const stone = stoneList[i];
+                        const checkX = bot.x + Math.cos(directAngle) * 80;
+                        const checkY = bot.y + Math.sin(directAngle) * 80;
+                        const dist = Math.hypot(checkX - stone.x, checkY - stone.y);
+                        if (dist < 100 && dist < minBlockDist) {
+                            blocked = { x: stone.x, y: stone.y, scale: 80, type: 'stone' };
+                            minBlockDist = dist;
+                        }
+                    }
+                    
+                    if (blocked) {
+                        // Calculate avoidance angle - go around the obstacle
+                        const toObstacle = Math.atan2(blocked.y - bot.y, blocked.x - bot.x);
+                        const angleDiff = directAngle - toObstacle;
+                        
+                        // Choose which side to go around (left or right)
+                        const avoidAngle = angleDiff > 0 ? toObstacle - Math.PI/2 : toObstacle + Math.PI/2;
+                        
+                        send(['9', [avoidAngle]]);
+                        if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                    } else {
+                        // Clear path - go directly
+                        send(['9', [directAngle]]);
+                        if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
+                    }
+                }
             }
             
             // Farm mode
