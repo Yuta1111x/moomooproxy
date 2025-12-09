@@ -243,11 +243,19 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
         .mm-tab-content.active { display: block; }
         
 
-        .mm-proxy-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; max-height: 150px; overflow-y: auto; }
+        /* Custom scrollbar */
+        .mm-proxy-grid::-webkit-scrollbar { width: 6px; }
+        .mm-proxy-grid::-webkit-scrollbar-track { background: rgba(0,0,0,0.3); border-radius: 3px; }
+        .mm-proxy-grid::-webkit-scrollbar-thumb { background: linear-gradient(180deg, ${ACCENT} 0%, #5c0000 100%); border-radius: 3px; }
+        .mm-proxy-grid::-webkit-scrollbar-thumb:hover { background: ${ACCENT_LIGHT}; }
+        
+        .mm-proxy-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 4px; max-height: 200px; overflow-y: auto; padding-right: 4px; }
         .mm-proxy-item {
-            font-size: 9px; padding: 6px 8px; background: rgba(255,255,255,0.05);
-            border-radius: 4px; display: flex; justify-content: space-between; align-items: center;
+            font-size: 9px; padding: 8px 10px; background: rgba(139,0,0,0.1);
+            border-radius: 6px; display: flex; justify-content: space-between; align-items: center;
+            border: 1px solid rgba(139,0,0,0.2); transition: all 0.2s;
         }
+        .mm-proxy-item:hover { background: rgba(139,0,0,0.2); border-color: rgba(139,0,0,0.4); }
         .mm-proxy-status { width: 8px; height: 8px; border-radius: 50%; }
         .mm-proxy-status.online { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
         .mm-proxy-status.offline { background: #ef4444; }
@@ -517,14 +525,32 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
     getEl('btnCopyGear').onclick = () => window.botsCopyGear?.();
     getEl('btnCopyWeapon').onclick = () => window.botsCopyWeapon?.();
 
-    // Toggle handlers
+    // Load saved settings from localStorage
+    const loadSettings = () => {
+        try {
+            const saved = localStorage.getItem('multibox_settings');
+            return saved ? JSON.parse(saved) : {};
+        } catch { return {}; }
+    };
+    const saveSettings = () => {
+        const settings = {};
+        ['botsCopyActions', 'botsCopyDir', 'botsCopyMove', 'botsAutoUpgrade', 'skipUpgrade', 'autoHealMe', 'autoHealBots', 'botsAutoAim', 'syncAttackEnabled'].forEach(k => {
+            settings[k] = window[k];
+        });
+        localStorage.setItem('multibox_settings', JSON.stringify(settings));
+    };
+    const savedSettings = loadSettings();
+    
+    // Toggle handlers with localStorage
     const setupToggle = (id, key, def) => {
-        window[key] = def;
+        // Load from saved or use default
+        window[key] = savedSettings[key] !== undefined ? savedSettings[key] : def;
         const el = getEl(id);
-        if (def) el.classList.add('on');
+        if (window[key]) el.classList.add('on');
         el.onclick = () => {
             window[key] = !window[key];
             el.classList.toggle('on', window[key]);
+            saveSettings();
             console.log(`[MultiBox] ${key}: ${window[key] ? 'ON' : 'OFF'}`);
         };
     };
