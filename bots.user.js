@@ -1587,21 +1587,42 @@ function wsType(url, proxyUrl) {
                 } else {
                     const directAngle = Math.atan2(targetY - bot.y, targetX - bot.x);
                     
-                    // Check for obstacles in path (trees, stones, buildings)
+                    // Check for obstacles in path (trees, stones, buildings, SPIKES)
                     let blocked = null;
                     let minBlockDist = Infinity;
+                    let isDangerous = false; // Spike/trap detection
                     
-                    // Check player objects
-                    for (let i = 0; i < Math.min(window.gameObjects.length, 30); i++) {
+                    // Spike types: 6=spike, 7=greater spike, 8=poison spike, 9=spinning spike
+                    // Also check pit traps (type 15) and turrets
+                    const DANGEROUS_TYPES = [6, 7, 8, 9, 15];
+                    
+                    // Check player objects (buildings, spikes, traps)
+                    for (let i = 0; i < Math.min(window.gameObjects.length, 50); i++) {
                         const obj = window.gameObjects[i];
                         if (!obj) continue;
-                        const checkDist = 80;
-                        const checkX = bot.x + Math.cos(directAngle) * checkDist;
-                        const checkY = bot.y + Math.sin(directAngle) * checkDist;
+                        
+                        // Check if it's a dangerous object (spike/trap) - AVOID MORE
+                        const isSpike = DANGEROUS_TYPES.includes(obj.type);
+                        const avoidRadius = isSpike ? 100 : 50; // Bigger radius for spikes
+                        
+                        // Check current position (immediate danger)
+                        const distNow = Math.hypot(bot.x - obj.x, bot.y - obj.y);
+                        if (isSpike && distNow < (obj.scale || 50) + 60) {
+                            // TOO CLOSE TO SPIKE - emergency avoid
+                            blocked = obj;
+                            minBlockDist = 0;
+                            isDangerous = true;
+                            break;
+                        }
+                        
+                        // Check path ahead
+                        const checkX = bot.x + Math.cos(directAngle) * 80;
+                        const checkY = bot.y + Math.sin(directAngle) * 80;
                         const dist = Math.hypot(checkX - obj.x, checkY - obj.y);
-                        if (dist < (obj.scale || 50) + 35 && dist < minBlockDist) {
+                        if (dist < (obj.scale || 50) + avoidRadius && dist < minBlockDist) {
                             blocked = obj;
                             minBlockDist = dist;
+                            isDangerous = isSpike;
                         }
                     }
                     
@@ -1634,8 +1655,9 @@ function wsType(url, proxyUrl) {
                         const toObstacle = Math.atan2(blocked.y - bot.y, blocked.x - bot.x);
                         const angleDiff = directAngle - toObstacle;
                         
-                        // Choose which side to go around (left or right)
-                        const avoidAngle = angleDiff > 0 ? toObstacle - Math.PI/2 : toObstacle + Math.PI/2;
+                        // For spikes - turn MORE sharply (almost backwards if needed)
+                        const turnAmount = isDangerous ? Math.PI * 0.7 : Math.PI / 2;
+                        const avoidAngle = angleDiff > 0 ? toObstacle - turnAmount : toObstacle + turnAmount;
                         
                         send(['9', [avoidAngle]]);
                         if (botWs.smartAttacking) { send(['F', [0]]); botWs.smartAttacking = false; }
