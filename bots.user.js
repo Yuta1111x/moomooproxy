@@ -477,8 +477,11 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
                     <div class="mm-toggle" id="togAutoAim"></div>
                 </div>
                 <div class="mm-toggle-row">
-                    <span class="mm-toggle-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Sync Attack [X]</span>
-                    <div class="mm-toggle" id="togSync"></div>
+                    <span class="mm-toggle-label"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg> Sync Attack</span>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <input type="text" id="syncKeyBind" class="mm-keybind" placeholder="X" maxlength="1" style="width:32px;height:24px;text-align:center;background:rgba(139,0,0,0.2);border:1px solid rgba(139,0,0,0.4);border-radius:4px;color:#fff;font-size:12px;font-weight:bold;text-transform:uppercase;">
+                        <div class="mm-toggle" id="togSync"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -599,9 +602,33 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
         ['botsCopyActions', 'botsCopyDir', 'botsCopyMove', 'botsAutoUpgrade', 'skipUpgrade', 'autoHealMe', 'autoHealBots', 'botsAutoAim', 'syncAttackEnabled'].forEach(k => {
             settings[k] = window[k];
         });
+        settings.syncKey = window.syncKey;
         localStorage.setItem('multibox_settings', JSON.stringify(settings));
     };
     const savedSettings = loadSettings();
+    
+    // Sync keybind setup
+    window.syncKey = savedSettings.syncKey || 'x';
+    const syncKeyInput = getEl('syncKeyBind');
+    if (syncKeyInput) {
+        syncKeyInput.value = window.syncKey.toUpperCase();
+        syncKeyInput.addEventListener('keydown', (e) => {
+            e.preventDefault();
+            if (e.key === 'Delete' || e.key === 'Backspace') {
+                // Unbind
+                window.syncKey = '';
+                syncKeyInput.value = '';
+                saveSettings();
+                console.log('[MultiBox] Sync key unbound');
+            } else if (e.key.length === 1) {
+                // Set new key
+                window.syncKey = e.key.toLowerCase();
+                syncKeyInput.value = e.key.toUpperCase();
+                saveSettings();
+                console.log(`[MultiBox] Sync key set to: ${e.key.toUpperCase()}`);
+            }
+        });
+    }
     
     // Toggle handlers with localStorage
     const setupToggle = (id, key, def) => {
@@ -770,9 +797,9 @@ window.syncAttack = () => {
     console.log(`[Sync] Fired at enemy! Player: ${playerHasRange}, Bots: ${botsWithRange.length}`);
 };
 
-// X key for sync attack
+// Sync attack keybind (customizable)
 document.addEventListener('keydown', e => {
-    if (e.key.toLowerCase() === 'x' && window.syncAttackEnabled) {
+    if (window.syncKey && e.key.toLowerCase() === window.syncKey && window.syncAttackEnabled) {
         window.syncAttack();
     }
 });
