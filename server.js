@@ -303,19 +303,25 @@ wss.on('connection', (clientWs, req) => {
     }
     
     const serverWs = new WebSocket(targetUrl, {
+        origin: 'https://moomoo.io',
         headers: {
             'Host': targetHost,
             'Origin': 'https://moomoo.io',
+            'Referer': 'https://moomoo.io/',
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
             'Accept-Language': 'en-US,en;q=0.9',
             'Accept-Encoding': 'gzip, deflate, br',
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
             'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits',
-            'Sec-WebSocket-Version': '13'
+            'Sec-WebSocket-Version': '13',
+            'Sec-Fetch-Dest': 'websocket',
+            'Sec-Fetch-Mode': 'websocket',
+            'Sec-Fetch-Site': 'same-site'
         },
         handshakeTimeout: CONNECTION_TIMEOUT,
-        rejectUnauthorized: false
+        rejectUnauthorized: false,
+        perMessageDeflate: true
     });
     
     serverWs.binaryType = 'arraybuffer';
