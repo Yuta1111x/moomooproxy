@@ -293,12 +293,29 @@ wss.on('connection', (clientWs, req) => {
     log('INFO', `[${connId}] Connecting to ${targetUrl.split('?')[0]}...`);
     
     // ===== CONNECT TO MOOMOO SERVER =====
+    // Extract the host from target URL for proper headers
+    let targetHost = '';
+    try {
+        const urlObj = new URL(targetUrl);
+        targetHost = urlObj.host;
+    } catch (e) {
+        targetHost = targetUrl.replace('wss://', '').replace('ws://', '').split('/')[0].split('?')[0];
+    }
+    
     const serverWs = new WebSocket(targetUrl, {
         headers: {
+            'Host': targetHost,
             'Origin': 'https://moomoo.io',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+            'Sec-WebSocket-Extensions': 'permessage-deflate; client_max_window_bits',
+            'Sec-WebSocket-Version': '13'
         },
-        handshakeTimeout: CONNECTION_TIMEOUT
+        handshakeTimeout: CONNECTION_TIMEOUT,
+        rejectUnauthorized: false
     });
     
     serverWs.binaryType = 'arraybuffer';
