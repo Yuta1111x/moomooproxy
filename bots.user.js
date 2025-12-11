@@ -17,6 +17,8 @@ document.msgpack = msgpack5;
 // ============ PROXY CONFIG ============
 // Proxies with random names (25 total)
 const PROXY_LIST = [
+    "wss://proxy-summer-glade-3462.fly.dev",
+    "wss://proxy-red-meadow-8146.fly.dev",
     "wss://relay-alpha-7x-production.up.railway.app",
     "wss://node-bridge-k9-production.up.railway.app",
     "wss://stream-hub-m3-production.up.railway.app",
@@ -221,7 +223,7 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
         const ACCENT_GLOW = 'rgba(139, 0, 0, 0.5)';
         
         const style = document.createElement('style');
-    style.innerHTML = `
+        style.innerHTML = `
 
         
         #modMenu {
@@ -360,14 +362,12 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
         .mm-proxy-status { width: 8px; height: 8px; border-radius: 50%; }
         .mm-proxy-status.online { background: #22c55e; box-shadow: 0 0 6px #22c55e; }
         .mm-proxy-status.offline { background: #ef4444; }
-    `;
-    document.head.appendChild(style);
+        `;
+        document.head.appendChild(style);
 
-
-
-    const menu = document.createElement('div');
-    menu.id = 'modMenu';
-    menu.innerHTML = `
+        const menu = document.createElement('div');
+        menu.id = 'modMenu';
+        menu.innerHTML = `
         <div class="mm-header">
             <span class="mm-title">
                 <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2">
@@ -540,36 +540,36 @@ const isAdmin = () => _$cfg._v === 1 && (_$cfg._m ^ 0x59555441) === 0;
             </div>
         </div>
         <div class="mm-hint">ESC toggle | X sync | v4.0 Blood by Yuta1111x</div>
-    `;
-    document.body.appendChild(menu);
+        `;
+        document.body.appendChild(menu);
 
-    // Menu toggle
-    let menuOpen = false;
-    const toggleMenu = () => {
-        menuOpen = !menuOpen;
-        menu.classList.toggle('show', menuOpen);
-    };
-    document.addEventListener('keydown', e => {
-        if (e.key === 'Escape') toggleMenu();
-    });
-
-    getEl('mmClose').onclick = () => { menuOpen = false; menu.classList.remove('show'); };
-    
-    // Tab switching
-    document.querySelectorAll('.mm-tab').forEach(tab => {
-        tab.onclick = () => {
-            document.querySelectorAll('.mm-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.mm-tab-content').forEach(c => c.classList.remove('active'));
-            tab.classList.add('active');
-            const tabId = 'tab' + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1);
-            getEl(tabId)?.classList.add('active');
+        // Menu toggle
+        let menuOpen = false;
+        const toggleMenu = () => {
+            menuOpen = !menuOpen;
+            menu.classList.toggle('show', menuOpen);
         };
-    });
-    
-    // Show admin tab if admin
-    if (isAdmin()) {
-        getEl('adminTab').style.display = 'block';
-    }
+        document.addEventListener('keydown', e => {
+            if (e.key === 'Escape') toggleMenu();
+        });
+
+        getEl('mmClose').onclick = () => { menuOpen = false; menu.classList.remove('show'); };
+        
+        // Tab switching
+        document.querySelectorAll('.mm-tab').forEach(tab => {
+            tab.onclick = () => {
+                document.querySelectorAll('.mm-tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.mm-tab-content').forEach(c => c.classList.remove('active'));
+                tab.classList.add('active');
+                const tabId = 'tab' + tab.dataset.tab.charAt(0).toUpperCase() + tab.dataset.tab.slice(1);
+                getEl(tabId)?.classList.add('active');
+            };
+        });
+        
+        // Show admin tab if admin
+        if (isAdmin()) {
+            getEl('adminTab').style.display = 'block';
+        }
     
     // Admin panel - proxy status
     if (isAdmin()) {
